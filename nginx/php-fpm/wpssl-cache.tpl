@@ -1,0 +1,193 @@
+server {
+    listen      %ip%:%web_port%;
+    server_name %domain_idn% %alias_idn%;
+
+    return 301 https://$host$request_uri; # add this part to redirect to ssl
+
+    root        %sdocroot%;
+    index       index.php index.html index.htm;
+    access_log  /var/log/nginx/domains/%domain%.log combined;
+    access_log  /var/log/nginx/domains/%domain%.bytes bytes;
+    error_log   /var/log/nginx/domains/%domain%.error.log error;
+
+    # ssl         on;
+    ssl_certificate      %ssl_pem%;
+    ssl_certificate_key  %ssl_key%;
+
+    # protect wp
+    location = /xmlrpc.php {
+        deny all;
+        access_log off;
+        log_not_found off;
+        return 444;
+    }
+
+    # deny access to .php under wp-content, will break timthumb and similar plugins
+    location /wp-content {
+
+        location ~ \.php$ {
+                deny all;
+                access_log off;
+                log_not_found off;
+                return 444;
+        }
+    }
+    # end deny access 
+
+    # deny access to .php under wp-includes
+    location /wp-includes {
+
+        location ~ \.php$ {
+                deny all;
+                access_log off;
+                log_not_found off;
+                return 444;
+        }
+    }
+
+    # protect wp-snapshots
+    location /wp-snapshots {
+
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+    }
+    # end protect wp-snapshots
+
+    # protect wp-login.php
+    location ^~ /wp-login.php {
+
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+
+        location ~ [^/]\.php(/|$) {
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            if (!-f $document_root$fastcgi_script_name) {
+                return  404;
+            }
+
+            fastcgi_pass    %backend_lsnr%;
+            fastcgi_index   index.php;
+            include         /etc/nginx/fastcgi_params;
+            
+            fastcgi_cache_bypass $skip_cache;
+            fastcgi_no_cache $skip_cache;
+
+            fastcgi_cache wpcache;
+            fastcgi_cache_valid  60m;            
+        }
+    }
+    # end protect wp-login.php
+
+    # protect wp-admin
+    location ^~ /wp-admin {
+
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+
+        location ~ [^/]\.php(/|$) {
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            if (!-f $document_root$fastcgi_script_name) {
+                return  404;
+            }
+
+            fastcgi_pass    %backend_lsnr%;
+            fastcgi_index   index.php;
+            include         /etc/nginx/fastcgi_params;
+            
+            fastcgi_cache_bypass $skip_cache;
+            fastcgi_no_cache $skip_cache;
+
+            fastcgi_cache wpcache;
+            fastcgi_cache_valid  60m;            
+        }
+    }
+    # end protect wp-admin
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+
+    set $skip_cache 0;
+
+    # POST requests and urls with a query string should always go to PHP
+    if ($request_method = POST) {
+        set $skip_cache 1;
+    }   
+    if ($query_string != "") {
+        set $skip_cache 1;
+    }   
+
+    # Don't cache uris containing the following segments
+    if ($request_uri ~* "/wp-admin/|/xmlrpc.php|wp-.*.php|/feed/|index.php|sitemap(_index)?.xml") {
+        set $skip_cache 1;
+    }   
+
+    # Don't use the cache for logged in users or recent commenters
+    if ($http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in") {
+        set $skip_cache 1;
+    }
+
+    location / {
+    
+        # Prevent author sniffing
+        if ($args ~ "^author=\d") { return 403; }
+        
+        try_files $uri $uri/ /index.php?$args;
+
+        location ~* ^.+\.(jpeg|jpg|png|gif|bmp|ico|svg|css|js)$ {
+            expires     max;
+        }
+
+        location ~ [^/]\.php(/|$) {
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            if (!-f $document_root$fastcgi_script_name) {
+                return  404;
+            }
+
+            fastcgi_pass    %backend_lsnr%;
+            fastcgi_index   index.php;
+            include         /etc/nginx/fastcgi_params;
+            
+            fastcgi_cache_bypass $skip_cache;
+            fastcgi_no_cache $skip_cache;
+
+            fastcgi_cache wpcache;
+            fastcgi_cache_valid  60m;            
+        }
+    }
+
+    location ~ /purge(/.*) {
+        fastcgi_cache_purge wpcache "$scheme$request_method$host$1";
+    }
+
+    error_page  403 /error/404.html;
+    error_page  404 /error/404.html;
+    error_page  500 502 503 504 /error/50x.html;
+
+    location /error/ {
+        alias   %home%/%user%/web/%domain%/document_errors/;
+    }
+
+    location ~* "/\.(htaccess|htpasswd)$" {
+        deny    all;
+        return  404;
+    }
+
+    location /vstats/ {
+        alias   %home%/%user%/web/%domain%/stats/;
+        include %home%/%user%/conf/web/%domain%.auth*;
+    }
+
+    include     /etc/nginx/conf.d/phpmyadmin.inc*;
+    include     /etc/nginx/conf.d/phppgadmin.inc*;
+    include     /etc/nginx/conf.d/webmail.inc*;
+
+    include     %home%/%user%/conf/web/snginx.%domain%.conf*;
+}
