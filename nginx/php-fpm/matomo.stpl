@@ -1,0 +1,94 @@
+server {
+    listen      %ip%:%web_ssl_port% ssl;
+    server_name %domain_idn% %alias_idn%;
+    root        %sdocroot%;
+    index       index.php;
+    access_log  /var/log/nginx/domains/%domain%.log combined;
+    access_log  /var/log/nginx/domains/%domain%.bytes bytes;
+    error_log   /var/log/nginx/domains/%domain%.error.log error;
+
+    # ssl         on;
+    ssl_certificate      %ssl_pem%;
+    ssl_certificate_key  %ssl_key%;
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+
+    location ~ ^/(index|matomo|piwik|js/index|plugins/HeatmapSessionRecording/configs)\.php$ {
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        if (!-f $document_root$fastcgi_script_name) {
+            return  404;
+        }
+        fastcgi_pass    %backend_lsnr%;
+        fastcgi_index   index.php;
+        include         /etc/nginx/fastcgi_params;
+    }
+
+    ## deny access to all other .php files
+    location ~* ^.+\.php$ {
+        deny all;
+        return 403;
+    }
+
+    ## serve all other files normally
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    ## disable all access to the following directories
+    location ~ ^/(config|tmp|core|lang) {
+        deny all;
+        return 403; # replace with 404 to not show these directories exist
+    }
+
+    location ~ js/container_.*_preview\.js$ {
+        expires off;
+        add_header Cache-Control 'private, no-cache, no-store';
+    }
+
+    location ~ \.(gif|ico|jpg|png|svg|js|css|htm|html|mp3|mp4|wav|ogg|avi|ttf|eot|woff|woff2|json)$ {
+        allow all;
+        ## Cache images,CSS,JS and webfonts for an hour Increasing the duration may improve the load-time, but may cause old files to show after an Matomo upgrade
+        expires 1h;
+        add_header Pragma public;
+        add_header Cache-Control "public";
+    }
+
+    location ~ ^/(libs|vendor|plugins|misc|node_modules) {
+        deny all;
+        return 403;
+    }
+
+    ## properly display textfiles in root directory
+    location ~/(.*\.md|LEGALNOTICE|LICENSE) {
+        default_type text/plain;
+    }
+
+    error_page 403 /error/404.html;
+    error_page  404 /error/404.html;
+    error_page  500 502 503 504 /error/50x.html;
+
+    location /error/ {
+        alias   %home%/%user%/web/%domain%/document_errors/;
+    }
+
+    location ~* "/\.(htaccess|htpasswd)$" {
+        deny    all;
+        return  404;
+    }
+
+    location /vstats/ {
+        alias   %home%/%user%/web/%domain%/stats/;
+        include %home%/%user%/conf/web/%domain%.auth*;
+    }
+
+    include     %home%/%user%/conf/web/snginx.%domain%.conf*;
+}
