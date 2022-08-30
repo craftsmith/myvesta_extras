@@ -11,9 +11,6 @@ server {
     ssl_certificate      %ssl_pem%;
     ssl_certificate_key  %ssl_key%;
 
-    # secure wp
-    include     /etc/nginx/secure-wp.conf;
-
     location = /favicon.ico {
         log_not_found off;
         access_log off;
