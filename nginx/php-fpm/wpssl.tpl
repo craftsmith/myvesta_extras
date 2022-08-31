@@ -66,12 +66,6 @@ server {
             fastcgi_pass    %backend_lsnr%;
             fastcgi_index   index.php;
             include         /etc/nginx/fastcgi_params;
-            
-            fastcgi_cache_bypass $skip_cache;
-            fastcgi_no_cache $skip_cache;
-
-            fastcgi_cache wpcache;
-            fastcgi_cache_valid  60m;            
         }
     }
     # end protect wp-admin
