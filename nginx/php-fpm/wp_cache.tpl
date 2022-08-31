@@ -1,6 +1,7 @@
 server {
-    listen      %ip%:%web_ssl_port% ssl;
+    listen      %ip%:%web_port%;
     server_name %domain_idn% %alias_idn%;
+
     root        %sdocroot%;
     index       index.php index.html index.htm;
     access_log  /var/log/nginx/domains/%domain%.log combined;
@@ -29,7 +30,7 @@ server {
                 return 444;
         }
     }
-    # end deny access 
+    # end deny access
 
     # deny access to .php under wp-includes
     location /wp-includes {
@@ -64,7 +65,7 @@ server {
 
             fastcgi_pass    %backend_lsnr%;
             fastcgi_index   index.php;
-            include         /etc/nginx/fastcgi_params;            
+            include         /etc/nginx/fastcgi_params;
         }
     }
     # end protect wp-login.php
@@ -83,7 +84,7 @@ server {
 
             fastcgi_pass    %backend_lsnr%;
             fastcgi_index   index.php;
-            include         /etc/nginx/fastcgi_params;         
+            include         /etc/nginx/fastcgi_params;
         }
     }
     # end protect wp-admin
@@ -104,15 +105,15 @@ server {
     # POST requests and urls with a query string should always go to PHP
     if ($request_method = POST) {
         set $skip_cache 1;
-    }   
+    }
     if ($query_string != "") {
         set $skip_cache 1;
-    }   
+    }
 
     # Don't cache uris containing the following segments
     if ($request_uri ~* "/wp-admin/|/xmlrpc.php|wp-.*.php|/feed/|index.php|sitemap(_index)?.xml") {
         set $skip_cache 1;
-    }   
+    }
 
     # Don't use the cache for logged in users or recent commenters
     if ($http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in") {
@@ -120,10 +121,10 @@ server {
     }
 
     location / {
-    
+
         # Prevent author sniffing
         if ($args ~ "^author=\d") { return 403; }
-        
+
         try_files $uri $uri/ /index.php?$args;
 
         location ~* ^.+\.(jpeg|jpg|png|gif|bmp|ico|svg|css|js)$ {
@@ -139,12 +140,12 @@ server {
             fastcgi_pass    %backend_lsnr%;
             fastcgi_index   index.php;
             include         /etc/nginx/fastcgi_params;
-            
+
             fastcgi_cache_bypass $skip_cache;
             fastcgi_no_cache $skip_cache;
 
             fastcgi_cache wpcache;
-            fastcgi_cache_valid  60m;            
+            fastcgi_cache_valid  60m;
         }
     }
 
