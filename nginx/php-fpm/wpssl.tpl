@@ -1,115 +1,55 @@
 server {
     listen      %ip%:%web_port%;
     server_name %domain_idn% %alias_idn%;
-
-    return 301 https://$host$request_uri; # add this part to redirect to ssl
-
-    root        %sdocroot%;
+    root        %docroot%;
     index       index.php index.html index.htm;
     access_log  /var/log/nginx/domains/%domain%.log combined;
     access_log  /var/log/nginx/domains/%domain%.bytes bytes;
     error_log   /var/log/nginx/domains/%domain%.error.log error;
 
-    # ssl         on;
-    ssl_certificate      %ssl_pem%;
-    ssl_certificate_key  %ssl_key%;
-
-    # protect wp
-    location = /xmlrpc.php {
-        deny all;
-        access_log off;
-        log_not_found off;
-        return 444;
-    }
-
-    # deny access to .php under wp-content, will break timthumb and similar plugins
-    location /wp-content {
-
-        location ~ \.php$ {
-                deny all;
-                access_log off;
-                log_not_found off;
-                return 444;
-        }
-    }
-
-    # deny access to .php under wp-includes
-    location /wp-includes {
-
-        location ~ \.php$ {
-                deny all;
-                access_log off;
-                log_not_found off;
-                return 444;
-        }
-    }
-
-    # protect wp-snapshots
-    location /wp-snapshots {
-
-        auth_basic "Restricted";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-    }
-
-    # protect wp-admin
-    location ^~ /wp-admin {
-
-        auth_basic "Restricted";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-
-        location ~ [^/]\.php(/|$) {
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-            if (!-f $document_root$fastcgi_script_name) {
-                return  404;
-            }
-
-            fastcgi_pass    %backend_lsnr%;
-            fastcgi_index   index.php;
-            include         /etc/nginx/fastcgi_params;
-        }
-    }
-    # end protect wp-admin
-
-    # protect wp-login.php
-    location ^~ /wp-login.php {
-
-        auth_basic "Restricted";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-
-        location ~ [^/]\.php(/|$) {
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-            if (!-f $document_root$fastcgi_script_name) {
-                return  404;
-            }
-
-            fastcgi_pass    %backend_lsnr%;
-            fastcgi_index   index.php;
-            include         /etc/nginx/fastcgi_params;
-        }
-    }
-    # end protect wp
-
-    location = /favicon.ico {
-        log_not_found off;
-        access_log off;
-    }
-
-    location = /robots.txt {
-        allow all;
-        log_not_found off;
-        access_log off;
-    }
-
     location / {
-    
-        # Prevent author sniffing
-        if ($args ~ "^author=\d") { return 403; } 
-        
-        try_files $uri $uri/ /index.php?$args;
-
-        location ~* ^.+\.(jpeg|jpg|png|gif|bmp|ico|svg|css|js)$ {
-            expires     max;
+        # Deny access to files xmlrpc.php and .anyfile
+        location ~ (/xmlrpc.php|/\.) {
+            deny all;
+            access_log off;
+            log_not_found off;
+            return 444;
         }
+
+        # Do not log access
+        location ~ (/favicon.ico|/robots.txt) {
+            log_not_found off;
+            access_log off;
+        }
+
+        # Deny access to .php under wp-content and wp-includes
+        location ~ (/wp-content|wp-includes) {
+            location ~ \.php$ {
+                    deny all;
+                    access_log off;
+                    log_not_found off;
+                    return 444;
+            }
+        }
+
+        # Protect wp-login from bruteforce attacks
+        location ~ /wp-login.php {
+            location ~ [^/]\.php(/|$) {
+                auth_basic "Restricted";
+                auth_basic_user_file /etc/nginx/.htpasswd;
+
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                if (!-f $document_root$fastcgi_script_name) {
+                    return  404;
+                }
+
+                fastcgi_pass    %backend_lsnr%;
+                fastcgi_index   index.php;
+                include         /etc/nginx/fastcgi_params;
+            }
+        }
+
+        try_files $uri $uri/ /index.php?$args;
 
         location ~ [^/]\.php(/|$) {
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -131,19 +71,5 @@ server {
         alias   %home%/%user%/web/%domain%/document_errors/;
     }
 
-    location ~* "/\.(htaccess|htpasswd)$" {
-        deny    all;
-        return  404;
-    }
-
-    location /vstats/ {
-        alias   %home%/%user%/web/%domain%/stats/;
-        include %home%/%user%/conf/web/%domain%.auth*;
-    }
-
-    include     /etc/nginx/conf.d/phpmyadmin.inc*;
-    include     /etc/nginx/conf.d/phppgadmin.inc*;
-    include     /etc/nginx/conf.d/webmail.inc*;
-
-    include     %home%/%user%/conf/web/snginx.%domain%.conf*;
+    include     %home%/%user%/conf/web/nginx.%domain%.conf*;
 }
